@@ -3,40 +3,215 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GAM Learning Lab</title>
+    <title>Math Gap - GAM Lab</title>
     
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
+
     <script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js" crossorigin="anonymous"></script>
-<script>
-  window.googletag = window.googletag || {cmd: []};
-  googletag.cmd.push(function() {
-    googletag.defineSlot('/6075/github_test_banner', [300, 250], 'div-gpt-ad-1776851474373-0').addService(googletag.pubads());
-    googletag.pubads().enableSingleRequest();
-    googletag.enableServices();
-  });
-</script>
-    
+    <script>
+      window.googletag = window.googletag || {cmd: []};
+      googletag.cmd.push(function() {
+        googletag.defineSlot('/6075/github_test_banner', [300, 250], 'div-gpt-ad-1776851474373-0').addService(googletag.pubads());
+        googletag.pubads().enableSingleRequest();
+        googletag.enableServices();
+      });
+    </script>
+
     <style>
-        body { font-family: sans-serif; margin: 40px; line-height: 1.6; }
-        .ad-slot { border: 1px dashed #ccc; background: #f9f9f9; margin: 20px 0; text-align: center; }
+        body {
+            margin: 0; padding: 0; background-color: #333;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; font-family: 'Arial', sans-serif; color: white;
+        }
+        #game-container {
+            margin: 20px 0;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .ad-container {
+            margin: 10px 0;
+            background: #444;
+            padding: 10px;
+            border: 1px dashed #777;
+            text-align: center;
+            min-width: 300px;
+            min-height: 250px;
+        }
+        h1 { margin-top: 20px; font-size: 24px; }
     </style>
 </head>
 <body>
 
-    <h1>Ad Manager Testing Site</h1>
-    <p>This is my sandbox for testing Google Publisher Tags.</p>
+    <h1>Math Gap: GAM Testing Lab</h1>
 
-    <div class="ad-slot">
-        <p>--- Ad Slot Start ---</p>
-        
-        <!-- /6075/github_test_banner -->
-<div id='div-gpt-ad-1776851474373-0' style='min-width: 300px; min-height: 250px;'>
-  <script>
-    googletag.cmd.push(function() { googletag.display('div-gpt-ad-1776851474373-0'); });
-  </script>
-</div>
-        
-        <p>--- Ad Slot End ---</p>
+    <div class="ad-container">
+        <p style="font-size: 10px; color: #888; margin-top: 0;">ADVERTISEMENT</p>
+        <div id='div-gpt-ad-1776851474373-0' style='min-width: 300px; min-height: 250px;'>
+          <script>
+            googletag.cmd.push(function() { googletag.display('div-gpt-ad-1776851474373-0'); });
+          </script>
+        </div>
     </div>
 
+    <div id="game-container"></div>
+
+    <script>
+        /**
+         * FULL PHASER GAME LOGIC
+         */
+        const config = {
+            type: Phaser.AUTO,
+            width: 400,
+            height: 600,
+            parent: 'game-container',
+            physics: {
+                default: 'arcade',
+                arcade: { gravity: { y: 1200 }, debug: false }
+            },
+            scene: { preload: preload, create: create, update: update }
+        };
+
+        const game = new Phaser.Game(config);
+
+        let player, pipes, score = 0, gameState = 'BOOT'; 
+        let currentProblem = { q: '', a: 0, d: 0, correctGap: 'top' };
+        let pipeSpeed = -200, spawnTimer, scoreText, questionText, menuText;
+
+        function preload() {
+            let birdGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+            birdGraphics.fillStyle(0xFFFF00, 1);
+            birdGraphics.fillCircle(15, 15, 15);
+            birdGraphics.lineStyle(2, 0x000000, 1);
+            birdGraphics.strokeCircle(15, 15, 15);
+            birdGraphics.generateTexture('bird', 30, 30);
+
+            let pipeGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+            pipeGraphics.fillStyle(0x2ecc71, 1);
+            pipeGraphics.fillRect(0, 0, 60, 600);
+            pipeGraphics.lineStyle(4, 0x27ae60, 1);
+            pipeGraphics.strokeRect(2, 0, 56, 600);
+            pipeGraphics.generateTexture('pipe', 60, 600);
+        }
+
+        function create() {
+            this.cameras.main.setBackgroundColor('#70c5ce');
+            pipes = this.physics.add.group();
+            player = this.physics.add.sprite(100, 300, 'bird');
+            player.setCircle(15);
+            player.body.allowGravity = false;
+            player.visible = false;
+
+            questionText = this.add.text(200, 50, '', { fontSize: '28px', fill: '#fff', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5);
+            scoreText = this.add.text(200, 100, 'Score: 0', { fontSize: '20px', fill: '#fff' }).setOrigin(0.5);
+            menuText = this.add.text(200, 300, 'MATH GAP\n\nTap to Start', { fontSize: '24px', fill: '#fff', align: 'center', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5);
+
+            this.input.on('pointerdown', () => handleInput(this));
+            this.physics.add.collider(player, pipes, hitPipe, null, this);
+            gameState = 'MENU';
+        }
+
+        function update() {
+            if (gameState === 'PLAYING') {
+                player.angle = Phaser.Math.Clamp(player.body.velocity.y * 0.1, -20, 90);
+                if (player.y > 600 || player.y < 0) gameOver.call(this);
+                
+                pipes.children.iterate(pipe => {
+                    if (pipe && pipe.isSensor && !pipe.passed && player.x > pipe.x) {
+                        pipe.passed = true;
+                        checkPassLogic.call(this, pipe.gapType);
+                    }
+                    if (pipe && pipe.x < -100) pipe.destroy();
+                });
+            }
+        }
+
+        function handleInput(scene) {
+            if (gameState === 'MENU') startGame(scene);
+            else if (gameState === 'PLAYING') player.setVelocityY(-350);
+            else if (gameState === 'GAMEOVER') scene.scene.restart();
+        }
+
+        function startGame(scene) {
+            gameState = 'PLAYING';
+            menuText.visible = false;
+            player.visible = true;
+            player.body.allowGravity = true;
+            player.setPosition(100, 300);
+            score = 0;
+            generateMathProblem();
+            spawnPipes(scene);
+            spawnTimer = scene.time.addEvent({ delay: 2500, callback: () => spawnPipes(scene), loop: true });
+        }
+
+        function generateMathProblem() {
+            let a = Phaser.Math.Between(1, 10), b = Phaser.Math.Between(1, 10);
+            currentProblem.q = `${a} + ${b} = ?`;
+            currentProblem.a = a + b;
+            currentProblem.d = currentProblem.a + Phaser.Math.RND.pick([-1, 1, 2]);
+            currentProblem.correctGap = Math.random() > 0.5 ? 'top' : 'bottom';
+            questionText.setText(currentProblem.q);
+        }
+
+        function spawnPipes(scene) {
+            if (gameState !== 'PLAYING') return;
+            const gapSize = 120, x = 450, midY = Phaser.Math.Between(200, 400);
+            let p1 = pipes.create(x, midY - gapSize - 300, 'pipe');
+            let p2 = pipes.create(x, midY, 'pipe'); p2.setDisplaySize(60, 80); 
+            let p3 = pipes.create(x, midY + gapSize + 300, 'pipe');
+
+            [p1, p2, p3].forEach(p => { p.body.allowGravity = false; p.body.immovable = true; p.setVelocityX(pipeSpeed); });
+
+            let topA = currentProblem.correctGap === 'top' ? currentProblem.a : currentProblem.d;
+            let botA = currentProblem.correctGap === 'bottom' ? currentProblem.a : currentProblem.d;
+
+            let t1 = scene.add.text(x, midY - 70, topA, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5);
+            let t2 = scene.add.text(x, midY + 70, botA, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5);
+
+            createSensor(scene, x, midY - 70, 'top', t1);
+            createSensor(scene, x, midY + 70, 'bottom', t2);
+        }
+
+        function createSensor(scene, x, y, type, textObj) {
+            let s = scene.add.rectangle(x + 30, y, 10, 100);
+            scene.physics.add.existing(s);
+            s.body.allowGravity = false;
+            s.body.setVelocityX(pipeSpeed);
+            s.isSensor = true; s.gapType = type; s.passed = false;
+            pipes.add(s);
+            
+            // Move text with the sensor
+            scene.events.on('update', () => { if(textObj.active) textObj.x = s.x - 30; });
+        }
+
+        function checkPassLogic(gapPassed) {
+            if (gapPassed === currentProblem.correctGap) {
+                score++;
+                scoreText.setText('Score: ' + score);
+                generateMathProblem();
+            } else {
+                gameOver.call(this);
+            }
+        }
+
+        function hitPipe() { gameOver.call(this); }
+
+        function gameOver() {
+            if (gameState === 'GAMEOVER') return;
+            gameState = 'GAMEOVER';
+            if (spawnTimer) spawnTimer.remove();
+            this.physics.pause();
+            player.setTint(0xff0000);
+            questionText.setText("WRONG!");
+            menuText.setText(`GAME OVER\nFinal Score: ${score}\nTap to Restart`);
+            menuText.visible = true;
+
+            // REFRESH AD ON GAMEOVER
+            console.log("Game Over: Requesting new ad...");
+            if(googletag && googletag.pubads) {
+                googletag.pubads().refresh();
+            }
+        }
+    </script>
 </body>
 </html>
