@@ -24,13 +24,13 @@
             min-height: 100vh; font-family: 'Arial', sans-serif; color: white;
         }
         #game-container {
-            margin: 20px 0;
+            margin-top: 20px;
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
             border-radius: 8px;
             overflow: hidden;
         }
         .ad-container {
-            margin: 10px 0;
+            margin: 20px 0;
             background: #444;
             padding: 10px;
             border: 1px dashed #777;
@@ -38,12 +38,11 @@
             min-width: 300px;
             min-height: 250px;
         }
-        h1 { margin-top: 20px; font-size: 24px; }
     </style>
 </head>
 <body>
 
-    <h1>Math Gap: GAM Testing Lab</h1>
+    <div id="game-container"></div>
 
     <div class="ad-container">
         <p style="font-size: 10px; color: #888; margin-top: 0;">ADVERTISEMENT</p>
@@ -54,12 +53,7 @@
         </div>
     </div>
 
-    <div id="game-container"></div>
-
     <script>
-        /**
-         * FULL PHASER GAME LOGIC
-         */
         const config = {
             type: Phaser.AUTO,
             width: 400,
@@ -73,8 +67,7 @@
         };
 
         const game = new Phaser.Game(config);
-
-        let player, pipes, score = 0, gameState = 'BOOT'; 
+        let player, pipes, labels, score = 0, gameState = 'BOOT'; 
         let currentProblem = { q: '', a: 0, d: 0, correctGap: 'top' };
         let pipeSpeed = -200, spawnTimer, scoreText, questionText, menuText;
 
@@ -97,14 +90,17 @@
         function create() {
             this.cameras.main.setBackgroundColor('#70c5ce');
             pipes = this.physics.add.group();
+            labels = this.add.group(); // Group for text labels
+            
             player = this.physics.add.sprite(100, 300, 'bird');
             player.setCircle(15);
             player.body.allowGravity = false;
             player.visible = false;
+            player.setDepth(10); // Ensure player is on top
 
-            questionText = this.add.text(200, 50, '', { fontSize: '28px', fill: '#fff', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5);
-            scoreText = this.add.text(200, 100, 'Score: 0', { fontSize: '20px', fill: '#fff' }).setOrigin(0.5);
-            menuText = this.add.text(200, 300, 'MATH GAP\n\nTap to Start', { fontSize: '24px', fill: '#fff', align: 'center', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5);
+            questionText = this.add.text(200, 50, '', { fontSize: '32px', fill: '#fff', stroke: '#000', strokeThickness: 5 }).setOrigin(0.5).setDepth(20);
+            scoreText = this.add.text(200, 100, 'Score: 0', { fontSize: '20px', fill: '#fff' }).setOrigin(0.5).setDepth(20);
+            menuText = this.add.text(200, 300, 'MATH GAP\n\nTap to Start', { fontSize: '24px', fill: '#fff', align: 'center', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(20);
 
             this.input.on('pointerdown', () => handleInput(this));
             this.physics.add.collider(player, pipes, hitPipe, null, this);
@@ -116,6 +112,14 @@
                 player.angle = Phaser.Math.Clamp(player.body.velocity.y * 0.1, -20, 90);
                 if (player.y > 600 || player.y < 0) gameOver.call(this);
                 
+                // Keep labels moving with pipes
+                labels.children.iterate(label => {
+                    if (label) {
+                        label.x += pipeSpeed * (game.loop.delta / 1000);
+                        if (label.x < -50) label.destroy();
+                    }
+                });
+
                 pipes.children.iterate(pipe => {
                     if (pipe && pipe.isSensor && !pipe.passed && player.x > pipe.x) {
                         pipe.passed = true;
@@ -139,6 +143,7 @@
             player.body.allowGravity = true;
             player.setPosition(100, 300);
             score = 0;
+            scoreText.setText('Score: 0');
             generateMathProblem();
             spawnPipes(scene);
             spawnTimer = scene.time.addEvent({ delay: 2500, callback: () => spawnPipes(scene), loop: true });
@@ -148,47 +153,55 @@
             let a = Phaser.Math.Between(1, 10), b = Phaser.Math.Between(1, 10);
             currentProblem.q = `${a} + ${b} = ?`;
             currentProblem.a = a + b;
-            currentProblem.d = currentProblem.a + Phaser.Math.RND.pick([-1, 1, 2]);
+            let offset = Phaser.Math.RND.pick([-2, -1, 1, 2]);
+            currentProblem.d = currentProblem.a + offset;
             currentProblem.correctGap = Math.random() > 0.5 ? 'top' : 'bottom';
             questionText.setText(currentProblem.q);
         }
 
         function spawnPipes(scene) {
             if (gameState !== 'PLAYING') return;
-            const gapSize = 120, x = 450, midY = Phaser.Math.Between(200, 400);
+            const gapSize = 150, x = 450, midY = Phaser.Math.Between(200, 400);
+            
             let p1 = pipes.create(x, midY - gapSize - 300, 'pipe');
-            let p2 = pipes.create(x, midY, 'pipe'); p2.setDisplaySize(60, 80); 
+            let p2 = pipes.create(x, midY, 'pipe'); p2.setDisplaySize(60, 100); 
             let p3 = pipes.create(x, midY + gapSize + 300, 'pipe');
 
-            [p1, p2, p3].forEach(p => { p.body.allowGravity = false; p.body.immovable = true; p.setVelocityX(pipeSpeed); });
+            [p1, p2, p3].forEach(p => { 
+                p.body.allowGravity = false; 
+                p.body.immovable = true; 
+                p.setVelocityX(pipeSpeed); 
+            });
 
-            let topA = currentProblem.correctGap === 'top' ? currentProblem.a : currentProblem.d;
-            let botA = currentProblem.correctGap === 'bottom' ? currentProblem.a : currentProblem.d;
+            let topValue = currentProblem.correctGap === 'top' ? currentProblem.a : currentProblem.d;
+            let botValue = currentProblem.correctGap === 'bottom' ? currentProblem.a : currentProblem.d;
 
-            let t1 = scene.add.text(x, midY - 70, topA, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5);
-            let t2 = scene.add.text(x, midY + 70, botA, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5);
+            // Create answer text
+            let t1 = scene.add.text(x, midY - (gapSize/2), topValue, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5).setDepth(15);
+            let t2 = scene.add.text(x, midY + (gapSize/2), botValue, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5).setDepth(15);
+            labels.add(t1);
+            labels.add(t2);
 
-            createSensor(scene, x, midY - 70, 'top', t1);
-            createSensor(scene, x, midY + 70, 'bottom', t2);
+            // Create invisible sensors for passing
+            createSensor(scene, x, midY - (gapSize/2), 'top');
+            createSensor(scene, x, midY + (gapSize/2), 'bottom');
+            
+            generateMathProblem(); // Prepare next problem for the next set
         }
 
-        function createSensor(scene, x, y, type, textObj) {
+        function createSensor(scene, x, y, type) {
             let s = scene.add.rectangle(x + 30, y, 10, 100);
             scene.physics.add.existing(s);
             s.body.allowGravity = false;
             s.body.setVelocityX(pipeSpeed);
             s.isSensor = true; s.gapType = type; s.passed = false;
             pipes.add(s);
-            
-            // Move text with the sensor
-            scene.events.on('update', () => { if(textObj.active) textObj.x = s.x - 30; });
         }
 
         function checkPassLogic(gapPassed) {
             if (gapPassed === currentProblem.correctGap) {
                 score++;
                 scoreText.setText('Score: ' + score);
-                generateMathProblem();
             } else {
                 gameOver.call(this);
             }
@@ -206,8 +219,6 @@
             menuText.setText(`GAME OVER\nFinal Score: ${score}\nTap to Restart`);
             menuText.visible = true;
 
-            // REFRESH AD ON GAMEOVER
-            console.log("Game Over: Requesting new ad...");
             if(googletag && googletag.pubads) {
                 googletag.pubads().refresh();
             }
