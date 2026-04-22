@@ -103,7 +103,7 @@
 
             this.input.on('pointerdown', () => handleInput(this));
             
-            // Collide with solid pipes
+            // Collide ONLY with solid pipes (Green)
             this.physics.add.collider(player, pipes, (p, pipe) => {
                 if (!pipe.isSensor) gameOver.call(this);
             });
@@ -120,19 +120,16 @@
                 pipes.children.iterate(child => {
                     if (!child) return;
 
-                    // Manual Check: When player crosses the pipe's X threshold
+                    // COORDINATE CHECK (No Physics Friction)
+                    // If player passes the X line of a sensor...
                     if (child.isSensor && !child.passed && player.x > child.x) {
                         child.passed = true;
                         
-                        // Check if player is vertically within THIS specific gap
-                        // A gap is considered 'entered' if the player's Y is near the sensor's Y
-                        let distanceToGap = Math.abs(player.y - child.y);
-                        
-                        if (distanceToGap < 80) { // Player is in this gap
+                        // Check if player is vertically within THIS specific gap zone
+                        if (Math.abs(player.y - child.y) < 100) { 
                             if (child.val === child.correctVal) {
                                 score++;
                                 scoreText.setText('Score: ' + score);
-                                // Generate next problem immediately so the next pipe spawned is updated
                                 generateMathProblem(); 
                             } else {
                                 gameOver.call(this);
@@ -157,6 +154,7 @@
             player.visible = true;
             player.body.allowGravity = true;
             player.setPosition(100, 300);
+            player.setVelocity(0, 0);
             score = 0;
             scoreText.setText('Score: 0');
             
@@ -183,13 +181,13 @@
 
         function spawnPipes(scene) {
             if (gameState !== 'PLAYING') return;
-            const gapSize = 160;
+            const gapSize = 180; // Slightly larger for better movement
             const x = 450;
             const midY = Phaser.Math.Between(200, 400);
             
-            // Solid Pipes (Top, Middle, Bottom)
+            // Solid Green Pillars
             let pTop = pipes.create(x, midY - gapSize - 300, 'pipe');
-            let pMid = pipes.create(x, midY, 'pipe'); pMid.setDisplaySize(60, 80); 
+            let pMid = pipes.create(x, midY, 'pipe'); pMid.setDisplaySize(60, 60); 
             let pBot = pipes.create(x, midY + gapSize + 300, 'pipe');
 
             [pTop, pMid, pBot].forEach(p => { 
@@ -199,19 +197,17 @@
                 p.isSensor = false;
             });
 
-            // Logic Gaps
             let topVal = currentProblem.correctGap === 'top' ? currentProblem.a : currentProblem.d;
             let botVal = currentProblem.correctGap === 'bottom' ? currentProblem.a : currentProblem.d;
 
-            // Create Visual Labels
+            // Labels
             let tTop = scene.add.text(x, midY - (gapSize/2), topVal, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5).setDepth(15);
             let tBot = scene.add.text(x, midY + (gapSize/2), botVal, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5).setDepth(15);
 
-            // Create Sensors (Invisible data points)
+            // Invisible Sensors (Data storage only, no collision)
             let sTop = pipes.create(x, midY - (gapSize/2), null);
             sTop.setVisible(false);
-            sTop.body.allowGravity = false;
-            sTop.setVelocityX(pipeSpeed);
+            sTop.body.setEnable(false); // Disable physics entirely for this object
             sTop.isSensor = true;
             sTop.val = topVal;
             sTop.correctVal = currentProblem.a;
@@ -219,18 +215,18 @@
 
             let sBot = pipes.create(x, midY + (gapSize/2), null);
             sBot.setVisible(false);
-            sBot.body.allowGravity = false;
-            sBot.setVelocityX(pipeSpeed);
+            sBot.body.setEnable(false); // Disable physics entirely for this object
             sBot.isSensor = true;
             sBot.val = botVal;
             sBot.correctVal = currentProblem.a;
             sBot.passed = false;
 
-            // Group labels to move them manually in update
             scene.events.on('update', () => {
                 if (tTop.active) {
                     tTop.x = pTop.x;
                     tBot.x = pTop.x;
+                    sTop.x = pTop.x; // Keep sensor data synced with pipe position
+                    sBot.x = pTop.x;
                 }
             });
         }
