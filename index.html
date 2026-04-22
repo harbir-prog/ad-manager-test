@@ -67,7 +67,7 @@
         };
 
         const game = new Phaser.Game(config);
-        let player, pipes, labels, score = 0, gameState = 'BOOT'; 
+        let player, pipes, score = 0, gameState = 'BOOT'; 
         let currentProblem = { q: '', a: 0, d: 0, correctGap: '' };
         let pipeSpeed = -200, spawnTimer, scoreText, questionText, menuText;
 
@@ -90,7 +90,6 @@
         function create() {
             this.cameras.main.setBackgroundColor('#70c5ce');
             pipes = this.physics.add.group();
-            labels = this.add.group();
             
             player = this.physics.add.sprite(100, 300, 'bird');
             player.setCircle(15);
@@ -104,15 +103,10 @@
 
             this.input.on('pointerdown', () => handleInput(this));
             
-            // Critical: Add overlap check for sensors
-            this.physics.add.overlap(player, pipes, (p, obj) => {
-                if (obj.isSensor && !obj.passed) {
-                    obj.passed = true;
-                    checkPassLogic.call(this, obj.gapType, obj.targetAnswer);
-                } else if (!obj.isSensor) {
-                    hitPipe.call(this);
-                }
-            }, null, this);
+            // Collide with solid pipes
+            this.physics.add.collider(player, pipes, (p, pipe) => {
+                if (!pipe.isSensor) gameOver.call(this);
+            });
 
             gameState = 'MENU';
         }
@@ -120,17 +114,33 @@
         function update() {
             if (gameState === 'PLAYING') {
                 player.angle = Phaser.Math.Clamp(player.body.velocity.y * 0.1, -20, 90);
+                
                 if (player.y > 600 || player.y < 0) gameOver.call(this);
                 
-                labels.children.iterate(label => {
-                    if (label) {
-                        label.x += pipeSpeed * (game.loop.delta / 1000);
-                        if (label.x < -100) label.destroy();
-                    }
-                });
+                pipes.children.iterate(child => {
+                    if (!child) return;
 
-                pipes.children.iterate(pipe => {
-                    if (pipe && pipe.x < -100) pipe.destroy();
+                    // Manual Check: When player crosses the pipe's X threshold
+                    if (child.isSensor && !child.passed && player.x > child.x) {
+                        child.passed = true;
+                        
+                        // Check if player is vertically within THIS specific gap
+                        // A gap is considered 'entered' if the player's Y is near the sensor's Y
+                        let distanceToGap = Math.abs(player.y - child.y);
+                        
+                        if (distanceToGap < 80) { // Player is in this gap
+                            if (child.val === child.correctVal) {
+                                score++;
+                                scoreText.setText('Score: ' + score);
+                                // Generate next problem immediately so the next pipe spawned is updated
+                                generateMathProblem(); 
+                            } else {
+                                gameOver.call(this);
+                            }
+                        }
+                    }
+
+                    if (child.x < -100) child.destroy();
                 });
             }
         }
@@ -155,80 +165,75 @@
             
             spawnTimer = scene.time.addEvent({ 
                 delay: 2500, 
-                callback: () => {
-                    generateMathProblem(); // Generate NEW problem for the NEXT pipe
-                    spawnPipes(scene);
-                }, 
+                callback: () => spawnPipes(scene), 
                 loop: true 
             });
         }
 
         function generateMathProblem() {
-            let a = Phaser.Math.Between(1, 10), b = Phaser.Math.Between(1, 10);
+            let a = Phaser.Math.Between(1, 10);
+            let b = Phaser.Math.Between(1, 10);
             currentProblem.q = `${a} + ${b} = ?`;
             currentProblem.a = a + b;
-            let offset = Phaser.Math.RND.pick([-2, -1, 1, 2]);
-            currentProblem.d = currentProblem.a + offset;
+            currentProblem.d = currentProblem.a + Phaser.Math.RND.pick([-1, 1, 2]);
+            if (currentProblem.d === currentProblem.a) currentProblem.d++;
             currentProblem.correctGap = Math.random() > 0.5 ? 'top' : 'bottom';
             questionText.setText(currentProblem.q);
         }
 
         function spawnPipes(scene) {
             if (gameState !== 'PLAYING') return;
-            const gapSize = 160, x = 450, midY = Phaser.Math.Between(200, 400);
+            const gapSize = 160;
+            const x = 450;
+            const midY = Phaser.Math.Between(200, 400);
             
-            let p1 = pipes.create(x, midY - gapSize - 300, 'pipe');
-            let p2 = pipes.create(x, midY, 'pipe'); p2.setDisplaySize(60, 100); 
-            let p3 = pipes.create(x, midY + gapSize + 300, 'pipe');
+            // Solid Pipes (Top, Middle, Bottom)
+            let pTop = pipes.create(x, midY - gapSize - 300, 'pipe');
+            let pMid = pipes.create(x, midY, 'pipe'); pMid.setDisplaySize(60, 80); 
+            let pBot = pipes.create(x, midY + gapSize + 300, 'pipe');
 
-            [p1, p2, p3].forEach(p => { 
+            [pTop, pMid, pBot].forEach(p => { 
                 p.body.allowGravity = false; 
                 p.body.immovable = true; 
-                p.isSensor = false;
                 p.setVelocityX(pipeSpeed); 
+                p.isSensor = false;
             });
 
-            let topValue = currentProblem.correctGap === 'top' ? currentProblem.a : currentProblem.d;
-            let botValue = currentProblem.correctGap === 'bottom' ? currentProblem.a : currentProblem.d;
+            // Logic Gaps
+            let topVal = currentProblem.correctGap === 'top' ? currentProblem.a : currentProblem.d;
+            let botVal = currentProblem.correctGap === 'bottom' ? currentProblem.a : currentProblem.d;
 
-            // Answers
-            let t1 = scene.add.text(x, midY - (gapSize/2), topValue, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5).setDepth(15);
-            let t2 = scene.add.text(x, midY + (gapSize/2), botValue, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5).setDepth(15);
-            labels.add(t1);
-            labels.add(t2);
+            // Create Visual Labels
+            let tTop = scene.add.text(x, midY - (gapSize/2), topVal, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5).setDepth(15);
+            let tBot = scene.add.text(x, midY + (gapSize/2), botVal, { fontSize: '32px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5).setDepth(15);
 
-            // Sensors - We now bake the "Current Correct Answer" into the sensor itself
-            createSensor(scene, x, midY - (gapSize/2), 'top', currentProblem.a, topValue);
-            createSensor(scene, x, midY + (gapSize/2), 'bottom', currentProblem.a, botValue);
+            // Create Sensors (Invisible data points)
+            let sTop = pipes.create(x, midY - (gapSize/2), null);
+            sTop.setVisible(false);
+            sTop.body.allowGravity = false;
+            sTop.setVelocityX(pipeSpeed);
+            sTop.isSensor = true;
+            sTop.val = topVal;
+            sTop.correctVal = currentProblem.a;
+            sTop.passed = false;
+
+            let sBot = pipes.create(x, midY + (gapSize/2), null);
+            sBot.setVisible(false);
+            sBot.body.allowGravity = false;
+            sBot.setVelocityX(pipeSpeed);
+            sBot.isSensor = true;
+            sBot.val = botVal;
+            sBot.correctVal = currentProblem.a;
+            sBot.passed = false;
+
+            // Group labels to move them manually in update
+            scene.events.on('update', () => {
+                if (tTop.active) {
+                    tTop.x = pTop.x;
+                    tBot.x = pTop.x;
+                }
+            });
         }
-
-        function createSensor(scene, x, y, type, correctAnswer, gapValue) {
-            let s = scene.add.rectangle(x + 30, y, 20, 140); // Wider hitbox
-            scene.physics.add.existing(s);
-            s.body.allowGravity = false;
-            s.body.setVelocityX(pipeSpeed);
-            s.isSensor = true; 
-            s.gapType = type; 
-            s.passed = false;
-            s.correctValue = correctAnswer; // What it SHOULD be
-            s.thisGapValue = gapValue;     // What this gap IS
-            pipes.add(s);
-        }
-
-        function checkPassLogic(gapType, targetAnswer) {
-            // Find the sensor the player just hit
-            const activeSensors = pipes.getChildren().filter(p => p.isSensor && p.passed);
-            const lastSensor = activeSensors[activeSensors.length - 1];
-
-            if (lastSensor.thisGapValue === lastSensor.correctValue) {
-                score++;
-                scoreText.setText('Score: ' + score);
-            } else {
-                gameOver.call(this);
-            }
-        }
-
-        function hitPipe() { gameOver.call(this); }
 
         function gameOver() {
             if (gameState === 'GAMEOVER') return;
