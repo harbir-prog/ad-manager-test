@@ -22,12 +22,14 @@
             margin: 0; padding: 0; background-color: #333;
             display: flex; flex-direction: column; align-items: center;
             min-height: 100vh; font-family: 'Arial', sans-serif; color: white;
+            overflow-x: hidden;
         }
         #game-container {
             margin-top: 20px;
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
             border-radius: 8px;
             overflow: hidden;
+            max-width: 100%;
         }
         .ad-container {
             margin: 20px 0;
@@ -97,9 +99,18 @@
             player.visible = false;
             player.setDepth(10);
 
-            questionText = this.add.text(200, 50, '', { fontSize: '32px', fill: '#fff', stroke: '#000', strokeThickness: 5 }).setOrigin(0.5).setDepth(20);
-            scoreText = this.add.text(200, 100, 'Score: 0', { fontSize: '20px', fill: '#fff' }).setOrigin(0.5).setDepth(20);
-            menuText = this.add.text(200, 300, '', { fontSize: '24px', fill: '#fff', align: 'center', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(20);
+            // Added wordWrap to ensure text stays within 400px width
+            questionText = this.add.text(200, 60, '', { 
+                fontSize: '32px', fill: '#fff', stroke: '#000', strokeThickness: 5,
+                wordWrap: { width: 380 }, align: 'center' 
+            }).setOrigin(0.5).setDepth(20);
+
+            scoreText = this.add.text(200, 110, 'Score: 0', { fontSize: '20px', fill: '#fff' }).setOrigin(0.5).setDepth(20);
+
+            menuText = this.add.text(200, 300, '', { 
+                fontSize: '22px', fill: '#fff', align: 'center', stroke: '#000', strokeThickness: 4,
+                wordWrap: { width: 350 } 
+            }).setOrigin(0.5).setDepth(20);
             
             menuText.setText('MATH GAP\n\nTap to Start');
 
@@ -167,12 +178,26 @@
         }
 
         function generateMathProblem() {
-            let a = Phaser.Math.Between(1, 10);
-            let b = Phaser.Math.Between(1, 10);
-            currentProblem.q = `${a} + ${b} = ?`;
-            currentProblem.a = a + b;
-            currentProblem.d = currentProblem.a + Phaser.Math.RND.pick([-1, 1, 2]);
-            if (currentProblem.d === currentProblem.a) currentProblem.d++;
+            const isMultiplication = Math.random() > 0.5;
+            
+            if (isMultiplication) {
+                // Simple multiplication: 2x2 up to 5x10 or 10x2
+                let a = Phaser.Math.Between(2, 10);
+                let b = Phaser.Math.Between(2, 5);
+                currentProblem.q = `${a} × ${b} = ?`;
+                currentProblem.a = a * b;
+            } else {
+                let a = Phaser.Math.Between(1, 20);
+                let b = Phaser.Math.Between(1, 20);
+                currentProblem.q = `${a} + ${b} = ?`;
+                currentProblem.a = a + b;
+            }
+
+            // Generate a distractor that isn't the answer
+            let distractor = currentProblem.a + Phaser.Math.RND.pick([-2, -1, 1, 2, 5]);
+            if (distractor < 0) distractor = currentProblem.a + 3;
+            currentProblem.d = distractor;
+
             currentProblem.correctGap = Math.random() > 0.5 ? 'top' : 'bottom';
             questionText.setText(currentProblem.q);
         }
@@ -233,12 +258,11 @@
             this.physics.pause();
             player.setTint(0xff0000);
             
-            // Show the custom reason and final score
             questionText.setText("GAME OVER");
             menuText.setText(`${reason}\n\nFinal Score: ${score}\n\nTap to Restart`);
             menuText.visible = true;
 
-            if(googletag && googletag.pubads) {
+            if(window.googletag && googletag.pubads) {
                 googletag.pubads().refresh();
             }
         }
